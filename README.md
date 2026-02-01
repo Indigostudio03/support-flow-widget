@@ -59,11 +59,20 @@ cp .env.example .env
 
 ### Intégrer le widget dans une app
 
+**Option 1: Avec data-project (recommandé)**
 ```html
-<script src="https://votre-app.vercel.app/widget.js"></script>
+<script src="https://votre-app.vercel.app/widget.js" data-project="vigitask"></script>
 ```
 
-C'est tout ! Le widget apparaît en bas à droite.
+**Option 2: Avec init()**
+```html
+<script src="https://votre-app.vercel.app/widget.js"></script>
+<script>
+  BugReporter.init({ projectId: 'vigitask' });
+</script>
+```
+
+Le `projectId` permet de router les bugs vers le bon dossier Auto Claude!
 
 ### Lancer le bridge local
 
@@ -86,6 +95,40 @@ Le bridge vérifie les nouvelles tâches toutes les 30 secondes et les écrit da
         └── screenshot-1.png
 ```
 
+## Configuration des projets
+
+### Ajouter un nouveau projet
+
+1. **Dans `api/chat/start.js` et `api/chat/message.js`**, ajouter le projet:
+```javascript
+const PROJECTS = {
+  'vigitask': { ... },
+  'mon-nouveau-projet': {
+    name: 'Mon Projet',
+    description: 'Description du projet',
+    components: ['component1', 'component2']
+  }
+};
+```
+
+2. **Dans `local-bridge/index.js`**, configurer le dossier Auto Claude:
+```javascript
+const PROJECTS_CONFIG = {
+  'vigitask': { ... },
+  'mon-nouveau-projet': {
+    name: 'Mon Projet',
+    specsDir: '/chemin/vers/.auto-claude/specs'
+  }
+};
+```
+
+### Projets préconfigurés
+
+| projectId | Projet | Dossier Auto Claude |
+|-----------|--------|---------------------|
+| `vigitask` | Vigitask | `.../Vigitask-1/.auto-claude/specs` |
+| `default` | Par défaut | `./specs` |
+
 ## Variables d'environnement
 
 ### Vercel (.env)
@@ -101,5 +144,4 @@ Le bridge vérifie les nouvelles tâches toutes les 30 secondes et les écrit da
 |----------|-------------|
 | `VERCEL_API_URL` | URL de l'app Vercel |
 | `POLLING_SECRET` | Même secret que Vercel |
-| `AUTO_CLAUDE_SPECS_DIR` | Chemin vers le dossier specs |
 | `POLL_INTERVAL` | Intervalle en secondes (défaut: 30) |

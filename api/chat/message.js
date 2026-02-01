@@ -9,6 +9,55 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// Projets configurés
+const PROJECTS = {
+  'vigitask': {
+    name: 'Vigitask',
+    description: 'Application de gestion de présences et planning (Next.js/React)',
+    components: ['attendance', 'attendance-v2', 'clients', 'reports', 'auth', 'dashboard', 'agents', 'planning', 'settings']
+  },
+  'default': {
+    name: 'Application',
+    description: 'Application web',
+    components: []
+  }
+};
+
+function getSystemPrompt(projectId) {
+  const project = PROJECTS[projectId] || PROJECTS['default'];
+  const componentsHint = project.components.length > 0
+    ? `\nComposants connus de ${project.name}: ${project.components.join(', ')}`
+    : '';
+
+  return `Tu es un assistant de support technique amical et efficace pour l'application ${project.name}. Ton rôle est de comprendre précisément les bugs signalés par les utilisateurs.
+${componentsHint}
+
+PROCESSUS:
+1. L'utilisateur décrit un problème
+2. Tu poses MAXIMUM 2 questions de clarification (une seule si possible!)
+3. Une fois le bug clair, tu génères un rapport structuré
+
+RÈGLES STRICTES:
+- Sois concis et amical (tutoie l'utilisateur)
+- MAXIMUM 2 questions de clarification, pas plus!
+- Compte tes questions - après 2 questions, tu DOIS générer le rapport
+- Si l'utilisateur fournit une capture d'écran, analyse-la attentivement
+- Si le bug est déjà clair dès le premier message, ne pose PAS de questions
+
+QUAND TU AS ASSEZ D'INFOS (ou après 2 questions max), réponds avec ce JSON (et UNIQUEMENT ce JSON):
+{
+  "ready": true,
+  "title": "Titre court du bug",
+  "description": "Description détaillée",
+  "steps": ["Étape 1", "Étape 2"],
+  "priority": "high|medium|low",
+  "category": "crash|ui|performance|feature|other",
+  "component": "Composant probable (ex: ${project.components.slice(0, 3).join(', ') || 'component'})"
+}
+
+SINON, réponds normalement en texte pour poser ta question (UNE SEULE à la fois).`;
+}
+
 const SYSTEM_PROMPT = `Tu es un assistant de support technique amical et efficace pour l'application VigiTask. Ton rôle est de comprendre précisément les bugs signalés par les utilisateurs.
 
 PROCESSUS:
@@ -50,7 +99,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { sessionId, message, images = [], history = [] } = req.body;
+  const { sessionId, message, images = [], history = [], projectId = 'default' } = req.body;
 
   if (!sessionId) {
     return res.status(400).json({ error: 'Session ID requis' });
@@ -66,7 +115,7 @@ export default async function handler(req, res) {
 
     // Construire les messages pour OpenAI
     const questionCount = history.filter(m => m.role === 'assistant').length;
-    let systemPrompt = SYSTEM_PROMPT;
+    let systemPrompt = getSystemPrompt(projectId);
 
     if (questionCount >= 2) {
       systemPrompt += `\n\nATTENTION: Tu as déjà posé ${questionCount} questions. Tu DOIS maintenant générer le rapport JSON final.`;
@@ -101,10 +150,11 @@ export default async function handler(req, res) {
         const bugReport = JSON.parse(jsonMatch[0]);
         if (bugReport.ready === true) {
           // Analyser le bug
-          const analysis = await analyzeInCodebase(bugReport);
+          const project = PROJECTS[projectId] || PROJECTS['default'];
+          const analysis = await analyzeInCodebase(bugReport, project);
 
           // Créer la tâche pour le polling
-          const task = createTask(bugReport, analysis, images);
+          const task = createTask(bugReport, analysis, images, projectId);
 
           // Stocker la tâche (via API interne)
           await storeTask(task, req);
@@ -160,8 +210,8 @@ function buildUserContent(message, images) {
   return content;
 }
 
-async function analyzeInCodebase(bugReport) {
-  const analysisPrompt = `Tu es un expert développeur analysant un bug report pour l'application VigiTask (Next.js/React).
+async function analyzeInCodebase(bugReport, project) {
+  const analysisPrompt = `Tu es un expert développeur analysant un bug report pour l'application ${project.name} (${project.description}).
 
 ## Bug Report
 **Titre:** ${bugReport.title}
@@ -209,11 +259,14 @@ Réponds en JSON:
   }
 }
 
-function createTask(bugReport, analysis, images) {
+function createTask(bugReport, analysis, images, projectId) {
   const id = 'task-' + Date.now();
+  const project = PROJECTS[projectId] || PROJECTS['default'];
 
   return {
     id,
+    projectId,
+    projectName: project.name,
     createdAt: new Date().toISOString(),
     status: 'pending',
     synced: false,

@@ -14,6 +14,23 @@ const path = require('path');
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Configuration des projets (projectId → dossier Auto Claude)
+const PROJECTS_CONFIG = {
+  'vigitask': {
+    name: 'Vigitask',
+    specsDir: '/Users/ennadayhamza/Dropbox/Visoo.be/Clients/AxessGuarding_23052017/V2/Vigitask-1/.auto-claude/specs'
+  },
+  'default': {
+    name: 'Default',
+    specsDir: process.env.AUTO_CLAUDE_SPECS_DIR || path.join(__dirname, '../specs')
+  }
+  // Ajouter d'autres projets ici:
+  // 'autre-projet': {
+  //   name: 'Autre Projet',
+  //   specsDir: '/chemin/vers/.auto-claude/specs'
+  // }
+};
+
 const CONFIG = {
   // URL de l'API Vercel (à modifier après déploiement)
   API_URL: process.env.VERCEL_API_URL || 'https://your-app.vercel.app',
@@ -21,16 +38,17 @@ const CONFIG = {
   // Secret pour l'authentification (doit correspondre à celui de Vercel)
   POLLING_SECRET: process.env.POLLING_SECRET || 'dev-secret',
 
-  // Dossier Auto Claude specs
-  SPECS_DIR: process.env.AUTO_CLAUDE_SPECS_DIR ||
-    '/Users/ennadayhamza/Dropbox/Visoo.be/Clients/AxessGuarding_23052017/V2/Vigitask-1/.auto-claude/specs',
-
   // Intervalle de polling (en secondes)
   POLL_INTERVAL: parseInt(process.env.POLL_INTERVAL) || 30,
 
   // Fichier de log local
   LOG_FILE: path.join(__dirname, 'sync.log')
 };
+
+function getSpecsDir(projectId) {
+  const project = PROJECTS_CONFIG[projectId] || PROJECTS_CONFIG['default'];
+  return project.specsDir;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOGGING
@@ -99,14 +117,14 @@ async function markTasksSynced(taskIds) {
 // SPEC CREATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-function getNextSpecNumber() {
-  if (!fs.existsSync(CONFIG.SPECS_DIR)) {
-    fs.mkdirSync(CONFIG.SPECS_DIR, { recursive: true });
+function getNextSpecNumber(specsDir) {
+  if (!fs.existsSync(specsDir)) {
+    fs.mkdirSync(specsDir, { recursive: true });
     return '001';
   }
 
-  const existingSpecs = fs.readdirSync(CONFIG.SPECS_DIR).filter(f => {
-    const fullPath = path.join(CONFIG.SPECS_DIR, f);
+  const existingSpecs = fs.readdirSync(specsDir).filter(f => {
+    const fullPath = path.join(specsDir, f);
     return fs.statSync(fullPath).isDirectory() && /^\d{3}-/.test(f);
   });
 
@@ -114,7 +132,8 @@ function getNextSpecNumber() {
 }
 
 function createSpecFolder(task) {
-  const specNumber = getNextSpecNumber();
+  const specsDir = getSpecsDir(task.projectId || 'default');
+  const specNumber = getNextSpecNumber(specsDir);
 
   // Créer le slug du titre
   const specSlug = task.title
@@ -126,7 +145,7 @@ function createSpecFolder(task) {
     .slice(0, 40);
 
   const specFolderName = `${specNumber}-${specSlug}`;
-  const specFolder = path.join(CONFIG.SPECS_DIR, specFolderName);
+  const specFolder = path.join(specsDir, specFolderName);
 
   // Créer le dossier
   if (!fs.existsSync(specFolder)) {
@@ -180,6 +199,7 @@ ${task.steps?.map((s, i) => `${i + 1}. ${s}`).join('\n') || 'Non spécifiées'}
 
 ## Notes
 - ID: ${task.id}
+- Projet: ${task.projectName || task.projectId || 'default'}
 - Spec: ${specNumber}
 - Créé: ${task.createdAt}
 - Synchronisé: ${new Date().toISOString()}
@@ -219,7 +239,8 @@ function saveScreenshots(task, specFolder) {
 }
 
 async function processTask(task) {
-  log(`Traitement de la tâche: ${task.title}`, 'task');
+  const projectLabel = task.projectName || task.projectId || 'default';
+  log(`Traitement de la tâche [${projectLabel}]: ${task.title}`, 'task');
 
   try {
     // Créer le dossier spec
@@ -231,7 +252,7 @@ async function processTask(task) {
     // Écrire le fichier spec.md
     const specFile = path.join(specFolder, 'spec.md');
     fs.writeFileSync(specFile, specContent);
-    log(`  📝 Spec créée: ${specFolderName}/spec.md`, 'success');
+    log(`  📝 Spec créée: ${specsDir}/${specFolderName}/spec.md`, 'success');
 
     // Sauvegarder les captures d'écran
     const savedScreenshots = saveScreenshots(task, specFolder);
@@ -291,8 +312,15 @@ async function startPolling() {
   console.log('═══════════════════════════════════════════════════════════════\n');
 
   log(`API URL: ${CONFIG.API_URL}`, 'info');
-  log(`Specs Dir: ${CONFIG.SPECS_DIR}`, 'info');
   log(`Intervalle: ${CONFIG.POLL_INTERVAL}s`, 'info');
+  console.log('');
+
+  // Afficher les projets configurés
+  log('Projets configurés:', 'info');
+  for (const [id, project] of Object.entries(PROJECTS_CONFIG)) {
+    const exists = fs.existsSync(project.specsDir);
+    log(`  - ${id} (${project.name}): ${project.specsDir} ${exists ? '✓' : '⚠️ non trouvé'}`, exists ? 'info' : 'warn');
+  }
   console.log('');
 
   // Vérifier la connexion

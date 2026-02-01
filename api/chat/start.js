@@ -3,6 +3,22 @@
  * Démarre une nouvelle conversation
  */
 
+// Projets configurés (à étendre selon les besoins)
+const PROJECTS = {
+  'vigitask': {
+    name: 'Vigitask',
+    description: 'Application de gestion de présences et planning',
+    components: ['attendance', 'clients', 'reports', 'auth', 'dashboard', 'agents', 'planning'],
+    welcomeMessage: "Salut! 👋 Décris-moi le problème que tu rencontres sur Vigitask. Tu peux aussi joindre une capture d'écran!"
+  },
+  'default': {
+    name: 'Projet',
+    description: 'Application',
+    components: [],
+    welcomeMessage: "Salut! 👋 Décris-moi le problème que tu rencontres. Tu peux aussi joindre une capture d'écran si ça aide!"
+  }
+};
+
 export default async function handler(req, res) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,13 +33,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  const { projectId = 'default' } = req.body;
+  const project = PROJECTS[projectId] || PROJECTS['default'];
 
-  // En serverless, on ne peut pas stocker en mémoire
-  // Le client garde l'historique et le renvoie à chaque message
+  const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 
   res.json({
     sessionId,
-    message: "Salut! 👋 Décris-moi le problème que tu rencontres. Tu peux aussi joindre une capture d'écran si ça aide!"
+    projectId,
+    projectName: project.name,
+    message: project.welcomeMessage
   });
 }
+
+export { PROJECTS };

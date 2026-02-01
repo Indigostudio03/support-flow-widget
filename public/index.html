@@ -124,20 +124,40 @@
     </div>
 
     <h3 style="margin-top: 30px;">Intégration</h3>
+
+    <p style="margin-bottom: 10px; font-weight: 600;">Option 1: Avec data-project</p>
     <div class="code-block">
       <code>
-<span class="highlight">&lt;script</span> <span class="string">src="https://votre-app.vercel.app/widget.js"</span><span class="highlight">&gt;&lt;/script&gt;</span>
+<span class="highlight">&lt;script</span> <span class="string">src="https://votre-app.vercel.app/widget.js"</span> <span class="highlight">data-project=</span><span class="string">"vigitask"</span><span class="highlight">&gt;&lt;/script&gt;</span>
       </code>
     </div>
 
-    <p style="color: #6b7280; font-size: 0.875rem;">
-      👆 Une seule ligne de code pour ajouter le widget à n'importe quelle application!
+    <p style="margin-bottom: 10px; font-weight: 600;">Option 2: Avec init()</p>
+    <div class="code-block">
+      <code>
+<span class="highlight">&lt;script</span> <span class="string">src="https://votre-app.vercel.app/widget.js"</span><span class="highlight">&gt;&lt;/script&gt;</span>
+<span class="highlight">&lt;script&gt;</span>
+  BugReporter.init({ <span class="string">projectId: 'vigitask'</span> });
+<span class="highlight">&lt;/script&gt;</span>
+      </code>
+    </div>
+
+    <p style="color: #6b7280; font-size: 0.875rem; margin-top: 15px;">
+      👆 Le projectId permet de router les bugs vers le bon projet Auto Claude!
     </p>
+
+    <div style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 10px;">
+      <strong>Projets disponibles:</strong>
+      <ul style="margin: 10px 0 0 20px; color: #6b7280;">
+        <li><code>vigitask</code> - Application de gestion de présences</li>
+        <li><code>default</code> - Projet par défaut</li>
+      </ul>
+    </div>
   </div>
 
   <div class="arrow">👉</div>
 
-  <!-- Widget auto-chargé -->
-  <script src="/widget.js"></script>
+  <!-- Widget avec projet Vigitask -->
+  <script src="/widget.js" data-project="vigitask"></script>
 </body>
 </html>

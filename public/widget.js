@@ -1,7 +1,7 @@
 /**
  * Bug Reporter Widget - Embeddable
  * Usage: <script src="https://your-app.vercel.app/widget.js"></script>
- *        <script>BugReporter.init({ position: 'bottom-right' })</script>
+ *        <script>BugReporter.init({ projectId: 'vigitask' })</script>
  */
 
 (function() {
@@ -12,6 +12,8 @@
 
   // State
   let sessionId = null;
+  let projectId = 'default';
+  let projectName = 'Support';
   let history = [];
   let images = [];
   let isOpen = false;
@@ -332,12 +334,20 @@
     try {
       const res = await fetch(`${API_BASE}/api/chat/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId })
       });
       const data = await res.json();
       sessionId = data.sessionId;
+      projectName = data.projectName || projectName;
       history = [];
       addMessage(data.message, 'assistant');
+
+      // Mettre à jour le header avec le nom du projet
+      const header = document.querySelector('#br-header h3');
+      if (header) {
+        header.textContent = `💬 Support ${projectName}`;
+      }
     } catch (error) {
       addMessage('Erreur de connexion. Réessaie plus tard.', 'system');
     }
@@ -373,6 +383,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
+          projectId,
           message,
           images: images.map(img => ({ data: img.data })),
           history
@@ -491,6 +502,14 @@
   // Public API
   window.BugReporter = {
     init: function(options = {}) {
+      // Configurer le projet
+      if (options.projectId) {
+        projectId = options.projectId;
+      }
+      if (options.projectName) {
+        projectName = options.projectName;
+      }
+
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', createWidget);
       } else {
@@ -506,6 +525,13 @@
     removeImage: removeImage
   };
 
-  // Auto-init
-  BugReporter.init();
+  // Auto-init seulement si pas de data-project spécifié
+  // Sinon, l'utilisateur doit appeler BugReporter.init({ projectId: 'xxx' })
+  const script = document.currentScript;
+  const autoProjectId = script?.getAttribute('data-project');
+
+  if (autoProjectId) {
+    projectId = autoProjectId;
+    BugReporter.init({ projectId: autoProjectId });
+  }
 })();
