@@ -7,6 +7,9 @@
  *        ou: npm run local-bridge
  */
 
+// Charger les variables d'environnement depuis .env
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+
 const fs = require('fs');
 const path = require('path');
 

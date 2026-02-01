@@ -1,12 +1,21 @@
 /**
  * POST /api/tasks/store
- * Stocke une tâche (appelé internement après analyse)
- * Utilise Vercel KV si disponible, sinon stockage temporaire
+ * Stocke une tâche dans Upstash Redis
  */
 
-// Stockage temporaire en mémoire (pour dev/fallback)
-// En production, utiliser Vercel KV ou une DB
-let memoryStore = [];
+import { Redis } from '@upstash/redis';
+
+// Client Redis initialisé à la demande
+let redis = null;
+function getRedis() {
+  if (!redis) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+  }
+  return redis;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,7 +24,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Vérifier le secret (sécurité basique)
+  // Vérifier le secret
   const secret = req.headers['x-internal-secret'];
   if (secret !== (process.env.POLLING_SECRET || 'dev-secret')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -28,30 +37,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Essayer Vercel KV si disponible
-    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      const { kv } = await import('@vercel/kv');
+    const client = getRedis();
 
-      // Ajouter à la liste des tâches
-      const tasks = await kv.get('pending_tasks') || [];
-      tasks.push(task);
-      await kv.set('pending_tasks', tasks);
+    // Récupérer les tâches existantes
+    let tasks = await client.get('pending_tasks') || [];
 
-      console.log(`Task stored in KV: ${task.id}`);
-    } else {
-      // Fallback: stockage en mémoire (limité en serverless)
-      memoryStore.push(task);
-      console.log(`Task stored in memory: ${task.id} (total: ${memoryStore.length})`);
-    }
+    // Ajouter la nouvelle tâche
+    tasks.push(task);
 
-    res.json({ success: true, taskId: task.id });
+    // Sauvegarder
+    await client.set('pending_tasks', tasks);
+
+    console.log(`Task stored: ${task.id} (total: ${tasks.length})`);
+
+    res.json({ success: true, taskId: task.id, total: tasks.length });
   } catch (error) {
     console.error('Store error:', error);
-    // Fallback en mémoire
-    memoryStore.push(task);
-    res.json({ success: true, taskId: task.id, fallback: true });
+    res.status(500).json({ error: error.message });
   }
 }
-
-// Export pour le polling
-export { memoryStore };

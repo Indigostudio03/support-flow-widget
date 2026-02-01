@@ -1,10 +1,21 @@
 /**
- * GET /api/tasks/poll
- * Récupère les tâches non synchronisées pour le bridge local
+ * GET /api/tasks/poll - Récupère les tâches non synchronisées
  * POST /api/tasks/poll - Marquer des tâches comme synchronisées
  */
 
-let memoryStore = [];
+import { Redis } from '@upstash/redis';
+
+// Client Redis initialisé à la demande
+let redis = null;
+function getRedis() {
+  if (!redis) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+  }
+  return redis;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -24,15 +35,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    let tasks = [];
-
-    // Essayer Vercel KV si disponible
-    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      const { kv } = await import('@vercel/kv');
-      tasks = await kv.get('pending_tasks') || [];
-    } else {
-      tasks = memoryStore;
-    }
+    const client = getRedis();
+    let tasks = await client.get('pending_tasks') || [];
 
     if (req.method === 'GET') {
       // Récupérer les tâches non synchronisées
@@ -62,12 +66,7 @@ export default async function handler(req, res) {
       });
 
       // Sauvegarder
-      if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-        const { kv } = await import('@vercel/kv');
-        await kv.set('pending_tasks', tasks);
-      } else {
-        memoryStore = tasks;
-      }
+      await client.set('pending_tasks', tasks);
 
       return res.json({
         success: true,

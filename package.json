@@ -8,6 +8,7 @@
     "local-bridge": "node local-bridge/index.js"
   },
   "dependencies": {
+    "@upstash/redis": "^1.36.1",
     "openai": "^4.28.0"
   },
   "devDependencies": {
