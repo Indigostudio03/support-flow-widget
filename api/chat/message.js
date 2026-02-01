@@ -5,9 +5,16 @@
 
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Client OpenAI initialisé à la demande (pour serverless)
+let openai = null;
+function getOpenAI() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+  }
+  return openai;
+}
 
 // Projets configurés
 const PROJECTS = {
@@ -133,7 +140,7 @@ export default async function handler(req, res) {
     const hasImages = images.length > 0;
     const model = hasImages ? 'gpt-4o' : 'gpt-4o-mini';
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model,
       messages,
       temperature: 0.7,
@@ -237,7 +244,7 @@ Réponds en JSON:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: 'Tu es un expert en debugging Next.js/React. Réponds uniquement en JSON valide.' },
