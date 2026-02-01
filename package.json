@@ -1,0 +1,16 @@
+{
+  "name": "support-flow-widget",
+  "version": "1.0.0",
+  "description": "Bug Reporter Widget - Embeddable chat widget for Auto Claude",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build needed'",
+    "local-bridge": "node local-bridge/index.js"
+  },
+  "dependencies": {
+    "openai": "^4.28.0"
+  },
+  "devDependencies": {
+    "vercel": "^33.0.0"
+  }
+}

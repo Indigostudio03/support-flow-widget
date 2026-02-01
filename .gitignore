@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+local-bridge/.env
+
+# Logs
+*.log
+local-bridge/sync.log
+
+# Vercel
+.vercel
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
