@@ -19,6 +19,76 @@
   let isOpen = false;
   let isLoading = false;
 
+  // Console logs capture
+  const MAX_LOGS = 50;
+  const consoleLogs = [];
+  const originalConsole = {
+    log: console.log,
+    error: console.error,
+    warn: console.warn,
+    info: console.info
+  };
+
+  // Intercepter les méthodes console
+  function interceptConsole() {
+    ['log', 'error', 'warn', 'info'].forEach(method => {
+      console[method] = function(...args) {
+        // Appeler la méthode originale
+        originalConsole[method].apply(console, args);
+
+        // Stocker le log
+        const logEntry = {
+          type: method,
+          timestamp: new Date().toISOString(),
+          message: args.map(arg => {
+            try {
+              if (typeof arg === 'object') {
+                return JSON.stringify(arg, null, 2);
+              }
+              return String(arg);
+            } catch (e) {
+              return String(arg);
+            }
+          }).join(' ')
+        };
+
+        consoleLogs.push(logEntry);
+
+        // Garder seulement les derniers MAX_LOGS
+        if (consoleLogs.length > MAX_LOGS) {
+          consoleLogs.shift();
+        }
+      };
+    });
+  }
+
+  // Capturer les erreurs non gérées
+  function captureErrors() {
+    window.addEventListener('error', (event) => {
+      consoleLogs.push({
+        type: 'uncaught_error',
+        timestamp: new Date().toISOString(),
+        message: `${event.message} at ${event.filename}:${event.lineno}:${event.colno}`,
+        stack: event.error?.stack || null
+      });
+      if (consoleLogs.length > MAX_LOGS) consoleLogs.shift();
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      consoleLogs.push({
+        type: 'unhandled_rejection',
+        timestamp: new Date().toISOString(),
+        message: event.reason?.message || String(event.reason),
+        stack: event.reason?.stack || null
+      });
+      if (consoleLogs.length > MAX_LOGS) consoleLogs.shift();
+    });
+  }
+
+  // Initialiser la capture dès le chargement
+  interceptConsole();
+  captureErrors();
+
   // Styles
   const styles = `
     #bug-reporter-widget {
@@ -378,6 +448,14 @@
     const typingId = addTyping();
 
     try {
+      // Préparer les logs de console (erreurs et warnings uniquement pour réduire le bruit)
+      const relevantLogs = consoleLogs.filter(log =>
+        log.type === 'error' ||
+        log.type === 'warn' ||
+        log.type === 'uncaught_error' ||
+        log.type === 'unhandled_rejection'
+      ).slice(-20); // Derniers 20 logs pertinents
+
       const res = await fetch(`${API_BASE}/api/chat/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -386,7 +464,13 @@
           projectId,
           message,
           images: images.map(img => ({ data: img.data })),
-          history
+          history,
+          consoleLogs: relevantLogs,
+          pageInfo: {
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString()
+          }
         })
       });
 

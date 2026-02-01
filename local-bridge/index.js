@@ -155,7 +155,73 @@ function createSpecFolder(task) {
     fs.mkdirSync(specFolder, { recursive: true });
   }
 
-  return { specNumber, specFolderName, specFolder };
+  return { specNumber, specFolderName, specFolder, specsDir };
+}
+
+function createRequirements(task) {
+  // Créer le task_description formaté en markdown
+  const taskDescription = `# ${task.title}
+
+## Description
+${task.description}
+
+## Étapes de reproduction
+${task.steps?.map((s, i) => `${i + 1}. ${s}`).join('\n') || 'Non spécifiées'}
+
+## Critères d'acceptation
+- Le bug est reproduit et compris
+- La correction est implémentée
+- Les tests passent
+- Pas de régression
+`;
+
+  return {
+    task_description: taskDescription,
+    workflow_type: 'bug_fix'
+  };
+}
+
+function createTaskMetadata(task) {
+  // Mapping de catégorie vers le format Auto-Claude
+  const categoryMapping = {
+    'bug': 'bug_fix',
+    'feature': 'feature',
+    'improvement': 'improvement',
+    'refactoring': 'refactoring'
+  };
+
+  // Mapping de priorité vers complexité/impact
+  const complexityMapping = {
+    'low': 'low',
+    'medium': 'medium',
+    'high': 'high',
+    'critical': 'high'
+  };
+
+  return {
+    sourceType: 'widget',
+    model: 'opus',
+    thinkingLevel: 'ultrathink',
+    isAutoProfile: false,
+    phaseModels: {
+      spec: 'opus',
+      planning: 'opus',
+      coding: 'opus',
+      qa: 'opus'
+    },
+    phaseThinking: {
+      spec: 'ultrathink',
+      planning: 'ultrathink',
+      coding: 'ultrathink',
+      qa: 'ultrathink'
+    },
+    baseBranch: 'main',
+    category: categoryMapping[task.category] || 'bug_fix',
+    complexity: complexityMapping[task.priority] || 'medium',
+    impact: complexityMapping[task.priority] || 'medium',
+    attachedImages: task.screenshots?.map((_, i) => `screenshots/screenshot-${i}.png`) || [],
+    requireReviewBeforeCoding: false
+  };
 }
 
 function createSpecContent(task, specNumber) {
@@ -172,6 +238,48 @@ ${task.screenshots.map((s, i) => `![Screenshot ${i + 1}](./screenshots/screensho
 `;
   }
 
+  // Section logs console (si présents)
+  let consoleLogsSection = '';
+  if (task.consoleLogs && task.consoleLogs.length > 0) {
+    const errorLogs = task.consoleLogs.filter(l => l.type === 'error' || l.type === 'uncaught_error' || l.type === 'unhandled_rejection');
+    const warnLogs = task.consoleLogs.filter(l => l.type === 'warn');
+
+    if (errorLogs.length > 0 || warnLogs.length > 0) {
+      consoleLogsSection = `## Logs Console (capturés automatiquement)
+
+> **Note pour Claude Code**: Ces logs ont été capturés automatiquement au moment du signalement du bug.
+
+`;
+      if (errorLogs.length > 0) {
+        consoleLogsSection += `### Erreurs (${errorLogs.length})
+\`\`\`
+${errorLogs.map(l => `[${l.type}] ${l.timestamp}\n${l.message}${l.stack ? '\n' + l.stack : ''}`).join('\n\n')}
+\`\`\`
+
+`;
+      }
+      if (warnLogs.length > 0) {
+        consoleLogsSection += `### Avertissements (${warnLogs.length})
+\`\`\`
+${warnLogs.map(l => `[warn] ${l.timestamp}\n${l.message}`).join('\n\n')}
+\`\`\`
+
+`;
+      }
+    }
+  }
+
+  // Section infos page (si présentes)
+  let pageInfoSection = '';
+  if (task.pageInfo && task.pageInfo.url) {
+    pageInfoSection = `## Contexte Navigateur
+- **URL**: ${task.pageInfo.url}
+- **User Agent**: ${task.pageInfo.userAgent || 'Non disponible'}
+- **Timestamp**: ${task.pageInfo.timestamp || 'Non disponible'}
+
+`;
+  }
+
   return `# ${task.title}
 
 ## Objectif
@@ -180,7 +288,7 @@ Corriger le bug: ${task.title}
 ## Description
 ${task.description}
 
-${screenshotsSection}## Contexte
+${screenshotsSection}${consoleLogsSection}${pageInfoSection}## Contexte
 - **Catégorie**: ${task.category || 'Non spécifiée'}
 - **Composant**: ${task.component || 'À déterminer'}
 - **Priorité**: ${task.priority || 'medium'}
@@ -247,7 +355,7 @@ async function processTask(task) {
 
   try {
     // Créer le dossier spec
-    const { specNumber, specFolderName, specFolder } = createSpecFolder(task);
+    const { specNumber, specFolderName, specFolder, specsDir } = createSpecFolder(task);
 
     // Créer le contenu du spec.md
     const specContent = createSpecContent(task, specNumber);
@@ -256,6 +364,30 @@ async function processTask(task) {
     const specFile = path.join(specFolder, 'spec.md');
     fs.writeFileSync(specFile, specContent);
     log(`  📝 Spec créée: ${specsDir}/${specFolderName}/spec.md`, 'success');
+
+    // Créer le fichier task_metadata.json (requis par Auto-Claude.app)
+    const taskMetadata = createTaskMetadata(task);
+    const metadataFile = path.join(specFolder, 'task_metadata.json');
+    fs.writeFileSync(metadataFile, JSON.stringify(taskMetadata, null, 2));
+    log(`  📋 Metadata créée: task_metadata.json`, 'success');
+
+    // Créer le fichier requirements.json (requis par Auto-Claude.app pour validation)
+    const requirements = createRequirements(task);
+    const requirementsFile = path.join(specFolder, 'requirements.json');
+    fs.writeFileSync(requirementsFile, JSON.stringify(requirements, null, 2));
+    log(`  📋 Requirements créées: requirements.json`, 'success');
+
+    // Sauvegarder les logs console (si présents)
+    if (task.consoleLogs && task.consoleLogs.length > 0) {
+      const consoleLogsFile = path.join(specFolder, 'console_logs.json');
+      fs.writeFileSync(consoleLogsFile, JSON.stringify({
+        capturedAt: task.pageInfo?.timestamp || new Date().toISOString(),
+        pageUrl: task.pageInfo?.url || 'unknown',
+        userAgent: task.pageInfo?.userAgent || 'unknown',
+        logs: task.consoleLogs
+      }, null, 2));
+      log(`  🔧 Console logs sauvegardés: console_logs.json (${task.consoleLogs.length} entrées)`, 'success');
+    }
 
     // Sauvegarder les captures d'écran
     const savedScreenshots = saveScreenshots(task, specFolder);

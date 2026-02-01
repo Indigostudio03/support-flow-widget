@@ -106,7 +106,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { sessionId, message, images = [], history = [], projectId = 'default' } = req.body;
+  const { sessionId, message, images = [], history = [], projectId = 'default', consoleLogs = [], pageInfo = {} } = req.body;
 
   if (!sessionId) {
     return res.status(400).json({ error: 'Session ID requis' });
@@ -160,8 +160,8 @@ export default async function handler(req, res) {
           const project = PROJECTS[projectId] || PROJECTS['default'];
           const analysis = await analyzeInCodebase(bugReport, project);
 
-          // Créer la tâche pour le polling
-          const task = createTask(bugReport, analysis, images, projectId);
+          // Créer la tâche pour le polling (avec logs console)
+          const task = createTask(bugReport, analysis, images, projectId, consoleLogs, pageInfo);
 
           // Stocker la tâche (via API interne)
           await storeTask(task, req);
@@ -266,7 +266,7 @@ Réponds en JSON:
   }
 }
 
-function createTask(bugReport, analysis, images, projectId) {
+function createTask(bugReport, analysis, images, projectId, consoleLogs = [], pageInfo = {}) {
   const id = 'task-' + Date.now();
   const project = PROJECTS[projectId] || PROJECTS['default'];
 
@@ -293,7 +293,10 @@ function createTask(bugReport, analysis, images, projectId) {
     screenshots: images.map((img, i) => ({
       index: i,
       data: img.data // Base64 data
-    }))
+    })),
+    // Nouveaux champs: logs console et infos page
+    consoleLogs: consoleLogs,
+    pageInfo: pageInfo
   };
 }
 
